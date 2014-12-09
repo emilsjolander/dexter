@@ -21,13 +21,13 @@ func (a *SigmoidActivation) CalcDerivative(x float64) float64 {
 	return a.Calc(x) * (1 - a.Calc(x))
 }
 
-type ReLActivation struct{}
+type ReLUActivation struct{}
 
-func (a *ReLActivation) Calc(x float64) float64 {
+func (a *ReLUActivation) Calc(x float64) float64 {
 	return math.Max(0, x)
 }
 
-func (a *ReLActivation) CalcDerivative(x float64) float64 {
+func (a *ReLUActivation) CalcDerivative(x float64) float64 {
 	return math.Max(0, x) / x
 }
 
