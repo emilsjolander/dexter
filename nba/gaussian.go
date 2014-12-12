@@ -58,7 +58,7 @@ func (nba *Gaussian) Fit(data map[Class][]Point) error {
 			return WrongDimensionError
 		}
 		totalPoints += len(points)
-		allPoints = append(allPoints, p)
+		allPoints = append(allPoints, points...)
 	}
 
 	for class, points := range data {
