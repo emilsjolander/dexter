@@ -38,22 +38,6 @@ func main() {
 	fmt.Println("%: ", 100*(float64(correct)/float64(len(testingInputs))))
 }
 
-func makeOutput(o float64) []float64 {
-	out := make([]float64, 10)
-	out[int(o)] = 1
-	return out
-}
-
-func checkEquals(output []float64, class float64) bool {
-	largestIndex := 0
-	for i, o := range output {
-		if o > output[largestIndex] {
-			largestIndex = i
-		}
-	}
-	return int(class) == largestIndex
-}
-
 func readData(fileName string) ([][]float64, []float64) {
 	file, err := os.Open(fileName)
 	if err != nil {
