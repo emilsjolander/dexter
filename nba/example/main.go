@@ -28,10 +28,7 @@ func main() {
 	correct := 0
 	for i := range testingInputs {
 		class, err := classifier.Classify(testingInputs[i])
-		if err != nil {
-			panic(err)
-		}
-		if class == nba.Class(fmt.Sprintf("%d", testingClasses[i])) {
+		if err == nil && class == nba.Class(fmt.Sprintf("%d", testingClasses[i])) {
 			correct++
 		}
 	}
@@ -60,7 +57,7 @@ func readData(fileName string) ([][]float64, []float64) {
 			if err != nil {
 				panic(err)
 			}
-			input = append(input, i/100)
+			input = append(input, i)
 		}
 		inputs = append(inputs, input)
 
