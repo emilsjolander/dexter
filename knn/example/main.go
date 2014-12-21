@@ -2,63 +2,83 @@ package main
 
 import (
 	"encoding/csv"
+	"flag"
 	"fmt"
-	"math/rand"
+	"log"
 	"os"
+	"runtime/pprof"
 	"strconv"
 
 	"github.com/emilsjolander/dexter/knn"
 )
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+
 func main() {
-	dataFile, err := os.Open("iris.data")
-	if err != nil {
-		panic(err)
-	}
-
-	records, err := csv.NewReader(dataFile).ReadAll()
-	if err != nil {
-		panic(err)
-	}
-
-	Shuffle(records)
-	classes := make([]string, len(records))
-	data := make([][]float64, len(records))
-
-	for i, row := range records {
-		classes[i] = row[len(row)-1]
-		data[i] = make([]float64, len(row)-1)
-		for j, s := range row[:len(row)-1] {
-			data[i][j], err = strconv.ParseFloat(s, 64)
-			if err != nil {
-				panic(err)
-			}
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
 		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 
-	knn := knn.New()
-	split := (len(data) / 4) * 3
-	for i := 0; i < split; i++ {
-		knn.Train(data[i], classes[i])
+	trainingInputs, trainingClasses := readData("optdigits.tra")
+	testingInputs, testingClasses := readData("optdigits.tes")
+
+	knn := knn.New(64, knn.EuclideanDistance)
+	err := knn.Fit(trainingInputs, trainingClasses)
+	if err != nil {
+		panic(err)
 	}
 
 	correct := 0
-	for i := split; i < len(data); i++ {
-		class, err := knn.Classify(data[i], 5)
+	for i := range testingInputs {
+		class, err := knn.Classify(testingInputs[i], 1)
 		if err != nil {
 			panic(err)
 		}
-		if class == classes[i] {
+		if class == testingClasses[i] {
 			correct++
 		}
 	}
 
-	fmt.Println("Classified this many correctly: ", float64(correct)/float64(len(data)-split))
+	fmt.Println("Total: ", len(testingInputs))
+	fmt.Println("Correct: ", correct)
+	fmt.Println("%: ", 100*(float64(correct)/float64(len(testingInputs))))
 }
 
-func Shuffle(a [][]string) {
-	for i := range a {
-		j := rand.Intn(i + 1)
-		a[i], a[j] = a[j], a[i]
+func readData(fileName string) ([]knn.Point, []string) {
+	file, err := os.Open(fileName)
+	if err != nil {
+		panic(err)
 	}
+	records, err := csv.NewReader(file).ReadAll()
+	if err != nil {
+		panic(err)
+	}
+
+	var classes []string
+	var inputs []knn.Point
+	for _, row := range records {
+		var input knn.Point
+		for _, item := range row[:len(row)-1] {
+			i, err := strconv.ParseFloat(item, 64)
+			if err != nil {
+				panic(err)
+			}
+			input = append(input, i)
+		}
+		inputs = append(inputs, input)
+
+		class, err := strconv.ParseInt(row[len(row)-1], 10, 64)
+		if err != nil {
+			panic(err)
+		}
+		classes = append(classes, fmt.Sprintf("%d", class))
+	}
+
+	return inputs, classes
 }

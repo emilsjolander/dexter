@@ -3,30 +3,55 @@ package knn
 import (
 	"errors"
 	"math"
+	"sort"
 )
 
-type Knn struct {
-	Dimensions int
-	Distance   func([]float64, []float64) float64
-	root       *kdtree
+type (
+	Point        []float64
+	DistanceFunc func(Point, Point) float64
+
+	value struct {
+		point Point
+		class string
+	}
+
+	Knn struct {
+		Dimensionality int
+		Distance       DistanceFunc
+		root           *kdtree
+	}
+
+	kdtree struct {
+		v     value
+		depth int
+		left  *kdtree
+		right *kdtree
+	}
+
+	nearestNeighbourInfo struct {
+		maxDist      float64
+		maxDistIndex int
+	}
+)
+
+var (
+	WrongDimensionError = errors.New("Dimensionality of data does not match that specified in construction of knn")
+	NotTrainedError     = errors.New("Knn has not been trained with any data")
+	NoDataError         = errors.New("No data was suplied")
+	LenMismatchError    = errors.New("Number of points does not match number of classes")
+	NoDistanceFunction  = errors.New("A distance function must be specified")
+)
+
+// Construct a KNN with a certain dimensionality and distance functions
+func New(dimensionality int, distance DistanceFunc) *Knn {
+	return &Knn{
+		Dimensionality: dimensionality,
+		Distance:       distance,
+	}
 }
 
-type kdtree struct {
-	value []float64
-	class string
-	depth int
-	left  *kdtree
-	right *kdtree
-}
-
-var WrongDimensionError = errors.New("Dimensionality of data does not match that specified in construction of knn")
-var NotTrainedError = errors.New("Knn has not been trained with any data")
-
-func New() *Knn {
-	return new(Knn)
-}
-
-func EuclideanDistance(p1 []float64, p2 []float64) float64 {
+// Standard k-dimensional euclidean distance function
+func EuclideanDistance(p1 Point, p2 Point) float64 {
 	var distance float64
 	for i := 0; i < len(p1); i++ {
 		distance += math.Pow(p1[i]-p2[i], 2)
@@ -34,46 +59,61 @@ func EuclideanDistance(p1 []float64, p2 []float64) float64 {
 	return math.Sqrt(distance)
 }
 
-func (knn *Knn) Train(point []float64, class string) error {
-	if knn.Dimensions == 0 {
-		knn.Dimensions = len(point)
-	} else if len(point) != knn.Dimensions {
-		return WrongDimensionError
+// Standard k-dimensional manhattan distance function
+func ManhattanDistance(p1 Point, p2 Point) float64 {
+	var distance float64
+	for i := 0; i < len(p1); i++ {
+		distance += math.Abs(p1[i] - p2[i])
+	}
+	return distance
+}
+
+// Train the KNN with a data set consisting of a map from classes to set of points for that class
+func (knn *Knn) Fit(points []Point, classes []string) error {
+	if len(points) == 0 {
+		return NoDataError
+	}
+	if len(points) != len(classes) {
+		return LenMismatchError
 	}
 
-	if knn.root == nil {
-		knn.root = &kdtree{
-			value: point,
-			class: class,
-			depth: 0,
+	// Gather values
+	values := make([]value, 0)
+	for i := range points {
+		if len(points[i]) != knn.Dimensionality {
+			return WrongDimensionError
 		}
-	} else {
-		knn.root.insert(point, class)
+		values = append(values, value{
+			point: points[i],
+			class: classes[i],
+		})
 	}
+
+	knn.root = &kdtree{depth: 0}
+	insert(knn.root, values)
 
 	return nil
 }
 
-func (knn *Knn) Classify(point []float64, k int) (string, error) {
+// Classify a point using the trained KNN
+func (knn *Knn) Classify(point Point, k int) (string, error) {
 	if knn.root == nil {
 		return "", NotTrainedError
-	}
-	if len(point) != knn.Dimensions {
+	} else if len(point) != knn.Dimensionality {
 		return "", WrongDimensionError
-	}
-
-	// Set default distnace function if none is present
-	if knn.Distance == nil {
-		knn.Distance = EuclideanDistance
+	} else if knn.Distance == nil {
+		return "", NoDistanceFunction
 	}
 
 	nearest := make([]*kdtree, k)
-	knn.nearestNieghbours(knn.root, point, nearest)
+	knn.nearestNieghbours(knn.root, point, nearest, &nearestNeighbourInfo{maxDist: math.MaxFloat64})
 
 	// Gather the votes
 	votes := make(map[string]int)
 	for _, n := range nearest {
-		votes[n.class]++
+		if n != nil {
+			votes[n.v.class]++
+		}
 	}
 
 	// Find the class with the largest vote
@@ -89,47 +129,46 @@ func (knn *Knn) Classify(point []float64, k int) (string, error) {
 	return class, nil
 }
 
-func (knn *Knn) nearestNieghbours(node *kdtree, point []float64, nearest []*kdtree) {
+func (knn *Knn) nearestNieghbours(node *kdtree, point Point, nearest []*kdtree, info *nearestNeighbourInfo) {
 	if node == nil {
 		return
 	}
 	axis := node.depth % len(point)
 
 	// Navigate to the bottom of the tree
-	if point[axis] < node.value[axis] {
-		knn.nearestNieghbours(node.left, point, nearest)
+	if point[axis] < node.v.point[axis] {
+		knn.nearestNieghbours(node.left, point, nearest, info)
 	} else {
-		knn.nearestNieghbours(node.right, point, nearest)
+		knn.nearestNieghbours(node.right, point, nearest, info)
 	}
 
 	// While recursing up check if this node is closer than any other node in the list
-	max, i := knn.maxDist(point, nearest)
-	dist := knn.Distance(point, node.value)
-	if dist < max {
-		nearest[i] = node
+	dist := knn.Distance(point, node.v.point)
+	if dist < info.maxDist {
+		nearest[info.maxDistIndex] = node
+
+		// Update max
+		info.maxDist, info.maxDistIndex = knn.maxDist(point, nearest)
 	}
 
-	// Update max
-	max, _ = knn.maxDist(point, nearest)
-
 	// Check if the hypersphere around point crosses this hyperplane, in that case traverse the other branch
-	if max > math.Abs(point[axis]-node.value[axis]) {
-		if point[axis] < node.value[axis] {
-			knn.nearestNieghbours(node.right, point, nearest)
-		} else if point[axis] > node.value[axis] {
-			knn.nearestNieghbours(node.left, point, nearest)
+	if info.maxDist > math.Abs(point[axis]-node.v.point[axis]) {
+		if point[axis] < node.v.point[axis] {
+			knn.nearestNieghbours(node.right, point, nearest, info)
+		} else if point[axis] > node.v.point[axis] {
+			knn.nearestNieghbours(node.left, point, nearest, info)
 		}
 	}
 }
 
-func (knn *Knn) maxDist(point []float64, nearest []*kdtree) (float64, int) {
+func (knn *Knn) maxDist(point Point, nearest []*kdtree) (float64, int) {
 	var max float64 = -1
 	var maxIndex int
 	for i, n := range nearest {
 		if n == nil {
 			return math.MaxFloat64, i
 		}
-		dist := knn.Distance(point, n.value)
+		dist := knn.Distance(point, n.v.point)
 		if dist > max {
 			max = dist
 			maxIndex = i
@@ -138,28 +177,41 @@ func (knn *Knn) maxDist(point []float64, nearest []*kdtree) (float64, int) {
 	return max, maxIndex
 }
 
-func (node *kdtree) insert(point []float64, class string) {
-	axis := node.depth % len(point)
+func insert(root *kdtree, values []value) {
+	if len(values) == 1 {
+		root.v = values[0]
+		return
+	}
 
-	if point[axis] < node.value[axis] {
-		if node.left == nil {
-			node.left = &kdtree{
-				value: point,
-				class: class,
-				depth: node.depth + 1,
-			}
-		} else {
-			node.left.insert(point, class)
-		}
-	} else {
-		if node.right == nil {
-			node.right = &kdtree{
-				value: point,
-				class: class,
-				depth: node.depth + 1,
-			}
-		} else {
-			node.right.insert(point, class)
+	axis := root.depth % len(values[0].point)
+	i := medianIndex(values, axis)
+
+	leftValues := values[:i]
+	pivot := values[i]
+	rightValues := values[i+1:]
+
+	root.v = pivot
+	if len(leftValues) != 0 {
+		root.left = &kdtree{depth: root.depth + 1}
+		insert(root.left, leftValues)
+	}
+	if len(rightValues) != 0 {
+		root.right = &kdtree{depth: root.depth + 1}
+		insert(root.right, rightValues)
+	}
+}
+
+func medianIndex(values []value, axis int) int {
+	valuesInAxis := make([]float64, len(values))
+	for i, val := range values {
+		valuesInAxis[i] = val.point[axis]
+	}
+	sort.Float64s(valuesInAxis)
+	mid := valuesInAxis[len(valuesInAxis)/2]
+	for i, val := range values {
+		if val.point[axis] > mid {
+			return i
 		}
 	}
+	return 0
 }
