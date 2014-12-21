@@ -28,9 +28,9 @@ type (
 		right *kdtree
 	}
 
-	nearestNeighbourInfo struct {
-		maxDist      float64
-		maxDistIndex int
+	distClassPair struct {
+		dist  float64
+		class string
 	}
 )
 
@@ -105,14 +105,14 @@ func (knn *Knn) Classify(point Point, k int) (string, error) {
 		return "", NoDistanceFunction
 	}
 
-	nearest := make([]*kdtree, k)
-	knn.nearestNieghbours(knn.root, point, nearest, &nearestNeighbourInfo{maxDist: math.MaxFloat64})
+	nearest := make([]*distClassPair, k)
+	knn.nearestNieghbours(knn.root, point, nearest)
 
 	// Gather the votes
 	votes := make(map[string]int)
 	for _, n := range nearest {
 		if n != nil {
-			votes[n.v.class]++
+			votes[n.class]++
 		}
 	}
 
@@ -129,48 +129,45 @@ func (knn *Knn) Classify(point Point, k int) (string, error) {
 	return class, nil
 }
 
-func (knn *Knn) nearestNieghbours(node *kdtree, point Point, nearest []*kdtree, info *nearestNeighbourInfo) {
+func (knn *Knn) nearestNieghbours(node *kdtree, point Point, nearest []*distClassPair) {
 	if node == nil {
 		return
 	}
 	axis := node.depth % len(point)
+	var otherBranch *kdtree
 
 	// Navigate to the bottom of the tree
 	if point[axis] < node.v.point[axis] {
-		knn.nearestNieghbours(node.left, point, nearest, info)
+		knn.nearestNieghbours(node.left, point, nearest)
+		otherBranch = node.right
 	} else {
-		knn.nearestNieghbours(node.right, point, nearest, info)
+		knn.nearestNieghbours(node.right, point, nearest)
+		otherBranch = node.left
 	}
 
 	// While recursing up check if this node is closer than any other node in the list
 	dist := knn.Distance(point, node.v.point)
-	if dist < info.maxDist {
-		nearest[info.maxDistIndex] = node
-
-		// Update max
-		info.maxDist, info.maxDistIndex = knn.maxDist(point, nearest)
+	max, i := maxDist(nearest)
+	if dist < max {
+		nearest[i] = &distClassPair{dist, node.v.class}
+		max, _ = maxDist(nearest)
 	}
 
 	// Check if the hypersphere around point crosses this hyperplane, in that case traverse the other branch
-	if info.maxDist > math.Abs(point[axis]-node.v.point[axis]) {
-		if point[axis] < node.v.point[axis] {
-			knn.nearestNieghbours(node.right, point, nearest, info)
-		} else if point[axis] > node.v.point[axis] {
-			knn.nearestNieghbours(node.left, point, nearest, info)
-		}
+	if max > math.Abs(point[axis]-node.v.point[axis]) {
+		knn.nearestNieghbours(otherBranch, point, nearest)
 	}
 }
 
-func (knn *Knn) maxDist(point Point, nearest []*kdtree) (float64, int) {
+func maxDist(nearest []*distClassPair) (float64, int) {
 	var max float64 = -1
 	var maxIndex int
 	for i, n := range nearest {
 		if n == nil {
 			return math.MaxFloat64, i
 		}
-		dist := knn.Distance(point, n.v.point)
-		if dist > max {
-			max = dist
+		if n.dist > max {
+			max = n.dist
 			maxIndex = i
 		}
 	}

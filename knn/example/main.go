@@ -29,6 +29,7 @@ func main() {
 			correct++
 		}
 	}
+	fmt.Println("3")
 
 	fmt.Println("Total: ", len(testingInputs))
 	fmt.Println("Correct: ", correct)
