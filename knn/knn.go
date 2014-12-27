@@ -54,7 +54,7 @@ func New(dimensionality int, distance DistanceFunc) *Knn {
 func EuclideanDistance(p1 Point, p2 Point) float64 {
 	var distance float64
 	for i := 0; i < len(p1); i++ {
-		distance += math.Pow(p1[i]-p2[i], 2)
+		distance += (p1[i] - p2[i]) * (p1[i] - p2[i])
 	}
 	return math.Sqrt(distance)
 }

@@ -22,7 +22,7 @@ type (
 var sqrt2Pi = math.Sqrt(2.0 * math.Pi)
 
 func (n *GuassianDistribution) Likelihood(x float64) float64 {
-	return (1.0 / (n.Sigma * sqrt2Pi)) * math.Exp(-math.Pow(x-n.Mean, 2)/(2.0*math.Pow(n.Sigma, 2)))
+	return (1.0 / (n.Sigma * sqrt2Pi)) * math.Exp(-(x-n.Mean)*(x-n.Mean)/(2.0*n.Sigma*n.Sigma))
 }
 
 func NewGaussian(dimensionality int) *Gaussian {
@@ -64,7 +64,7 @@ func (nba *Gaussian) Fit(data map[string][]Point) error {
 
 			// Calculate variance
 			for _, p := range points {
-				variance[i] += math.Pow(mean[i]-p[i], 2)
+				variance[i] += (mean[i] - p[i]) * (mean[i] - p[i])
 			}
 			variance[i] /= float64(len(points))
 

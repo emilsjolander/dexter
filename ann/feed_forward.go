@@ -38,7 +38,8 @@ func (a *TanhActivation) Calc(x float64) float64 {
 }
 
 func (a *TanhActivation) CalcDerivative(x float64) float64 {
-	return 1 - math.Pow(a.Calc(x), 2)
+	res := a.Calc(x)
+	return 1 - res*res
 }
 
 type FeedForward struct {
@@ -171,7 +172,7 @@ func (net *FeedForward) Train(in []float64, out []float64) ([]float64, error) {
 	// Return a square error to the caller so that they can choose when to stop training
 	sqError := make([]float64, len(out))
 	for i := 0; i < len(out); i++ {
-		sqError[i] = math.Pow(prediction[i]-out[i], 2)
+		sqError[i] = (prediction[i] - out[i]) * (prediction[i] - out[i])
 	}
 	return sqError, nil
 }

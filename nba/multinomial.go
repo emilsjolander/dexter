@@ -83,7 +83,6 @@ func (nba *Multinomial) Classify(doc string) (string, error) {
 	var bestClassLogProbability float64 = -math.MaxFloat64
 
 	for class, classPrior := range nba.classPriors {
-
 		// Get the total class model for the point conditiond on this class
 		var logSum float64 = 0
 		for _, word := range words(doc) {
